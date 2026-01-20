@@ -67,6 +67,20 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   popd
 fi
 
+# Verify libtorrent is discoverable via pkg-config; if not, show diagnostics
+if ! ${PKG_CONFIG:-pkg-config} --exists libtorrent 2>/dev/null; then
+  echo "ERROR: pkg-config cannot find libtorrent after building/installing it." >&2
+  echo "PKG_CONFIG=${PKG_CONFIG:-$(command -v pkg-config 2>/dev/null || echo 'none')}" >&2
+  echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-}" >&2
+  echo "Listing /usr/local/lib/pkgconfig:" >&2
+  ls -la /usr/local/lib/pkgconfig || true
+  echo "Looking for libtorrent .pc files:" >&2
+  find /usr/local/lib/pkgconfig -maxdepth 1 -type f -name '*libtorrent*.pc' -print -exec sed -n '1,200p' {} \; || true
+  echo "pkg-config --list-all | grep libtorrent:" >&2
+  ${PKG_CONFIG:-pkg-config} --list-all 2>/dev/null | grep libtorrent || true
+  exit 1
+fi
+
 pushd "${SRC_TO_BUILD}"
 
 # Run autotools if present
