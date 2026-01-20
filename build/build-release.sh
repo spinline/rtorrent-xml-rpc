@@ -60,6 +60,10 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   make install || true
   ldconfig || true
   export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  # Force use of host pkg-config so configure checks find the just-installed libtorrent
+  if command -v pkg-config >/dev/null 2>&1; then
+    export PKG_CONFIG="$(command -v pkg-config)"
+  fi
   popd
 fi
 
@@ -85,6 +89,7 @@ if [ -f configure ]; then
     CFG_FLAGS="${CFG_FLAGS} --disable-ncurses"
   fi
 
+  echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-} PKG_CONFIG=${PKG_CONFIG:-$(command -v pkg-config 2>/dev/null || echo '')}"
   echo "Configuring rtorrent: host=${HOST:-native} flags='${CFG_FLAGS}'"
   ./configure ${HOST:-} ${CFG_FLAGS} || true
 fi
