@@ -1,0 +1,72 @@
+name: Build and Release rtorrent (multi-arch)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
+          - platform: linux/arm/v7
+            arch: armv7
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable QEMU emulation
+        uses: tonistiigi/binfmt@v0.8.0
+        with:
+          formats: all
+
+      - name: Build inside container for ${{ matrix.arch }}
+        run: |
+          docker run --rm --platform=${{ matrix.platform }} -v "${{ github.workspace }}":/src -w /src debian:stable-slim bash -lc "apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf automake libtool pkg-config libcurl4-openssl-dev libsigc++-2.0-dev libncurses5-dev libxmlrpc-c++8-dev git && chmod +x build/build-release.sh && ./build/build-release.sh ${{ matrix.arch }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rtorrent-${{ matrix.arch }}
+          path: rtorrent-${{ matrix.arch }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Pack release artifacts
+        run: |
+          tar -czf release-artifacts-${{ github.ref_name }}.tar.gz -C artifacts .
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset (builds)
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release-artifacts-${{ github.ref_name }}.tar.gz
+          asset_name: rtorrent-builds-${{ github.ref_name }}.tar.gz
+          asset_content_type: application/gzip
