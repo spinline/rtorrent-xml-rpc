@@ -16,6 +16,20 @@ echo "Building for arch=${ARCH}"
 SRC_ROOT="$(pwd)"
 # Default RPC implementation (jsonrpc or xmlrpc)
 RPC_IMPL="${RPC_IMPL:-jsonrpc}"
+# Cross-compile host detection (set before building libtorrent)
+HOST=""
+if [ "${ARCH}" = "mips" ]; then
+  if command -v mips-linux-gnu-gcc >/dev/null 2>&1; then
+    echo "Setting up MIPS cross-compile environment"
+    export CC=mips-linux-gnu-gcc
+    export CXX=mips-linux-gnu-g++
+    export AR=mips-linux-gnu-ar
+    export RANLIB=mips-linux-gnu-ranlib
+    HOST="--host=mips-linux-gnu"
+  else
+    echo "MIPS cross-compiler not found; will attempt native build (may fail)" >&2
+  fi
+fi
 # If no build system or binary present in the repo, clone upstream rtorrent
 if [ -f autogen.sh ] || [ -f configure ] || [ -f src/rtorrent ]; then
   SRC_TO_BUILD="${SRC_ROOT}"
@@ -61,27 +75,18 @@ fi
 
 if [ -f configure ]; then
   chmod +x configure
-  # Cross-compile support for MIPS
+  CFG_FLAGS=""
+  if [ "${RPC_IMPL}" = "jsonrpc" ]; then
+    CFG_FLAGS="${CFG_FLAGS} --enable-jsonrpc"
+  fi
+  # When cross-compiling for MIPS, ncurses target headers/libs are often unavailable;
+  # disable ncurses UI to avoid missing target curses headers.
   if [ "${ARCH}" = "mips" ]; then
-    if command -v mips-linux-gnu-gcc >/dev/null 2>&1; then
-      echo "Using MIPS cross-compiler mips-linux-gnu-gcc"
-      export CC=mips-linux-gnu-gcc
-      export CXX=mips-linux-gnu-g++
-      export AR=mips-linux-gnu-ar
-      export RANLIB=mips-linux-gnu-ranlib
-      HOST="--host=mips-linux-gnu"
-    else
-      echo "Warning: mips cross-compiler not found; attempting native configure (may fail)" >&2
-      HOST=""
-    fi
+    CFG_FLAGS="${CFG_FLAGS} --disable-ncurses"
   fi
 
-  if [ "${RPC_IMPL}" = "jsonrpc" ]; then
-    echo "Configuring rtorrent with JSON-RPC support"
-    ./configure ${HOST:-} --enable-jsonrpc || true
-  else
-    ./configure ${HOST:-} || true
-  fi
+  echo "Configuring rtorrent: host=${HOST:-native} flags='${CFG_FLAGS}'"
+  ./configure ${HOST:-} ${CFG_FLAGS} || true
 fi
 
 make -j"$(nproc || echo 2)" || true
