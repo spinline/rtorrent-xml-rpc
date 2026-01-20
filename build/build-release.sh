@@ -24,6 +24,29 @@ else
   SRC_TO_BUILD="${SRC_ROOT}/rtorrent-src"
 fi
 
+# Ensure libtorrent (rakshasa) is available via pkg-config; build/install it if missing
+if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; then
+  echo "libtorrent pkg-config not found; cloning and building https://github.com/rakshasa/libtorrent.git"
+  rm -rf "${SRC_ROOT}/libtorrent-src"
+  git clone --depth 1 https://github.com/rakshasa/libtorrent.git "${SRC_ROOT}/libtorrent-src"
+  pushd "${SRC_ROOT}/libtorrent-src"
+  if [ -f autogen.sh ]; then
+    chmod +x autogen.sh
+    ./autogen.sh || true
+  else
+    autoreconf -i || true
+  fi
+  if [ -f configure ]; then
+    chmod +x configure
+    ./configure --prefix=/usr/local || true
+  fi
+  make -j"$(nproc || echo 2)" || true
+  make install || true
+  ldconfig || true
+  export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  popd
+fi
+
 pushd "${SRC_TO_BUILD}"
 
 # Run autotools if present
