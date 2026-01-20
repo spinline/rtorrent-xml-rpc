@@ -22,10 +22,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Enable QEMU emulation
-        uses: tonistiigi/binfmt@v0.8.0
-        with:
-          formats: all
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
 
       - name: Build inside container for ${{ matrix.arch }}
         run: |
