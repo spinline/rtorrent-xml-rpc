@@ -124,9 +124,24 @@ if [ -f configure ]; then
     CFG_FLAGS="${CFG_FLAGS} --disable-ncurses"
   fi
 
+  # Determine build triplet for --build
+  BUILD_TRIPLET="$(gcc -dumpmachine 2>/dev/null || echo x86_64-linux-gnu)"
+
   echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-} PKG_CONFIG=${PKG_CONFIG:-$(command -v pkg-config 2>/dev/null || echo '')}"
-  echo "Configuring rtorrent: host=${HOST:-native} flags='${CFG_FLAGS}'"
-  ./configure ${HOST:-} ${CFG_FLAGS} || true
+  echo "Configuring rtorrent: host=${HOST:-native} build=${BUILD_TRIPLET} flags='${CFG_FLAGS}'"
+
+  if [ -n "${HOST}" ]; then
+    # Provide common ac_cv_* overrides to avoid running test programs while cross-compiling.
+    RTORRENT_ACVARS="${RTORRENT_ACVARS:-ac_cv_file__dev_zero=yes ac_cv_func_malloc_0_nonnull=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes}"
+    echo "Using RTORRENT_ACVARS: ${RTORRENT_ACVARS}"
+    env ${RTORRENT_ACVARS} ./configure --host=${HOST#--host=} --build=${BUILD_TRIPLET} ${CFG_FLAGS} || {
+      echo "rtorrent configure failed; dumping config.log for diagnosis:" >&2
+      [ -f config.log ] && sed -n '1,200p' config.log >&2 || true
+      exit 1
+    }
+  else
+    ./configure ${HOST:-} ${CFG_FLAGS} || exit 1
+  fi
 fi
 
 make -j"$(nproc || echo 2)" || true
