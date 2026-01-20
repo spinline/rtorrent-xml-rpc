@@ -54,7 +54,20 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   fi
   if [ -f configure ]; then
     chmod +x configure
-    ./configure --prefix=/usr/local ${HOST:-}
+    echo "Running libtorrent configure with host='${HOST:-native}'"
+    # When cross-compiling, avoid running test programs by predefining common ac_cv_* vars.
+    if [ -n "${HOST}" ]; then
+      : "Using cross-compile safe configure variables"
+      : "You can override via LIBTORRENT_ACVARS env var"
+      LIBTORRENT_ACVARS="${LIBTORRENT_ACVARS:-ac_cv_func_malloc_0_nonnull=yes ac_cv_file__dev_zero=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes}"
+      env ${LIBTORRENT_ACVARS} ./configure --prefix=/usr/local ${HOST} || {
+        echo "libtorrent configure failed; dumping config.log for diagnosis:" >&2
+        [ -f config.log ] && sed -n '1,200p' config.log >&2 || true
+        return 1
+      }
+    else
+      ./configure --prefix=/usr/local ${HOST:-}
+    fi
   fi
   make -j"$(nproc || echo 2)"
   make install
