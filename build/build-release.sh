@@ -14,6 +14,8 @@ echo "Building for arch=${ARCH}"
 
 # Run autotools if present
 SRC_ROOT="$(pwd)"
+# Default RPC implementation (jsonrpc or xmlrpc)
+RPC_IMPL="${RPC_IMPL:-jsonrpc}"
 # If no build system or binary present in the repo, clone upstream rtorrent
 if [ -f autogen.sh ] || [ -f configure ] || [ -f src/rtorrent ]; then
   SRC_TO_BUILD="${SRC_ROOT}"
@@ -59,7 +61,12 @@ fi
 
 if [ -f configure ]; then
   chmod +x configure
-  ./configure || true
+  if [ "${RPC_IMPL}" = "jsonrpc" ]; then
+    echo "Configuring rtorrent with JSON-RPC support"
+    ./configure --enable-jsonrpc || true
+  else
+    ./configure || true
+  fi
 fi
 
 make -j"$(nproc || echo 2)" || true
