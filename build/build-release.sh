@@ -13,9 +13,25 @@ mkdir -p "${BUILD_DIR}"
 echo "Building for arch=${ARCH}"
 
 # Run autotools if present
+SRC_ROOT="$(pwd)"
+# If no build system or binary present in the repo, clone upstream rtorrent
+if [ -f autogen.sh ] || [ -f configure ] || [ -f src/rtorrent ]; then
+  SRC_TO_BUILD="${SRC_ROOT}"
+else
+  echo "No rtorrent source detected in repo; cloning https://github.com/rakshasa/rtorrent.git"
+  rm -rf "${SRC_ROOT}/rtorrent-src"
+  git clone --depth 1 https://github.com/rakshasa/rtorrent.git "${SRC_ROOT}/rtorrent-src"
+  SRC_TO_BUILD="${SRC_ROOT}/rtorrent-src"
+fi
+
+pushd "${SRC_TO_BUILD}"
+
+# Run autotools if present
 if [ -f autogen.sh ]; then
   chmod +x autogen.sh
   ./autogen.sh || true
+elif [ -f configure.ac ] || [ -f configure.in ]; then
+  autoreconf -i || true
 fi
 
 if [ -f configure ]; then
@@ -24,6 +40,8 @@ if [ -f configure ]; then
 fi
 
 make -j"$(nproc || echo 2)" || true
+
+popd
 
 # locate binary
 BIN=""
