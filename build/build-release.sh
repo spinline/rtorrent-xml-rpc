@@ -59,7 +59,7 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
     if [ -n "${HOST}" ]; then
       : "Using cross-compile safe configure variables"
       : "You can override via LIBTORRENT_ACVARS env var"
-      LIBTORRENT_ACVARS="${LIBTORRENT_ACVARS:-ac_cv_func_malloc_0_nonnull=yes ac_cv_file__dev_zero=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes}"
+      LIBTORRENT_ACVARS="${LIBTORRENT_ACVARS:-ac_cv_func_malloc_0_nonnull=yes ac_cv_file__dev_zero=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes ac_cv_c_bigendian=no}"
       env ${LIBTORRENT_ACVARS} ./configure --prefix=/usr/local ${HOST} || {
         echo "libtorrent configure failed; dumping config.log for diagnosis:" >&2
         [ -f config.log ] && sed -n '1,200p' config.log >&2 || true
@@ -132,7 +132,7 @@ if [ -f configure ]; then
 
   if [ -n "${HOST}" ]; then
     # Provide common ac_cv_* overrides to avoid running test programs while cross-compiling.
-    RTORRENT_ACVARS="${RTORRENT_ACVARS:-ac_cv_file__dev_zero=yes ac_cv_func_malloc_0_nonnull=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes}"
+    RTORRENT_ACVARS="${RTORRENT_ACVARS:-ac_cv_file__dev_zero=yes ac_cv_func_malloc_0_nonnull=yes ac_cv_func_posix_memalign=yes ac_cv_func_realloc_0_nonnull=yes ac_cv_c_bigendian=no}"
     echo "Using RTORRENT_ACVARS: ${RTORRENT_ACVARS}"
     env ${RTORRENT_ACVARS} ./configure --host=${HOST#--host=} --build=${BUILD_TRIPLET} ${CFG_FLAGS} || {
       echo "rtorrent configure failed; dumping config.log for diagnosis:" >&2
