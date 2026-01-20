@@ -1,0 +1,222 @@
+name: Build rtorrent with XML-RPC
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      rtorrent_version:
+        description: 'rtorrent version to build (e.g., v0.9.8)'
+        required: false
+        default: 'v0.9.8'
+
+env:
+  XMLRPC_VERSION: '1.51.08'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.arch }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            docker_arch: amd64
+            host: x86_64-linux-gnu
+          - arch: aarch64
+            docker_arch: arm64v8
+            host: aarch64-linux-gnu
+          - arch: armv7l
+            docker_arch: arm32v7
+            host: arm-linux-gnueabihf
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      - name: Determine rtorrent version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.rtorrent_version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building rtorrent ${VERSION}"
+
+      - name: Build in Docker container
+        run: |
+          docker run --rm \
+            --platform linux/${{ matrix.docker_arch }} \
+            -v $PWD:/workspace \
+            -w /workspace \
+            ${{ matrix.docker_arch }}/ubuntu:22.04 \
+            bash -c '
+              set -e
+              export DEBIAN_FRONTEND=noninteractive
+              
+              # Update and install build dependencies
+              apt-get update
+              apt-get install -y \
+                build-essential \
+                autoconf \
+                automake \
+                libtool \
+                pkg-config \
+                libncurses-dev \
+                libcurl4-openssl-dev \
+                libssl-dev \
+                zlib1g-dev \
+                wget \
+                ca-certificates
+              
+              # Create build directory
+              mkdir -p /tmp/build
+              cd /tmp/build
+              
+              # Build xmlrpc-c
+              echo "Building xmlrpc-c..."
+              wget -q https://sourceforge.net/projects/xmlrpc-c/files/Xmlrpc-c%20Super%20Stable/${{ env.XMLRPC_VERSION }}/xmlrpc-c-${{ env.XMLRPC_VERSION }}.tgz
+              tar xzf xmlrpc-c-${{ env.XMLRPC_VERSION }}.tgz
+              cd xmlrpc-c-${{ env.XMLRPC_VERSION }}
+              ./configure --prefix=/usr/local \
+                --disable-wininet-client \
+                --disable-curl-client \
+                --disable-libwww-client \
+                --disable-cplusplus
+              make -j$(nproc)
+              make install
+              cd ..
+              
+              # Build libtorrent
+              echo "Building libtorrent..."
+              wget -q https://github.com/rakshasa/libtorrent/archive/${{ steps.version.outputs.version }}.tar.gz -O libtorrent.tar.gz
+              tar xzf libtorrent.tar.gz
+              cd libtorrent-*
+              ./autogen.sh
+              ./configure --prefix=/usr/local \
+                --with-posix-fallocate \
+                --enable-static \
+                --disable-shared
+              make -j$(nproc)
+              make install
+              cd ..
+              
+              # Build rtorrent
+              echo "Building rtorrent..."
+              wget -q https://github.com/rakshasa/rtorrent/archive/${{ steps.version.outputs.version }}.tar.gz -O rtorrent.tar.gz
+              tar xzf rtorrent.tar.gz
+              cd rtorrent-*
+              ./autogen.sh
+              ./configure --prefix=/usr/local \
+                --with-xmlrpc-c \
+                --enable-static \
+                LDFLAGS="-static-libgcc -static-libstdc++"
+              make -j$(nproc)
+              
+              # Strip and copy binary
+              strip src/rtorrent
+              cp src/rtorrent /workspace/rtorrent-${{ matrix.arch }}
+              
+              # Verify XML-RPC support
+              echo "Verifying XML-RPC support..."
+              if ldd /workspace/rtorrent-${{ matrix.arch }} 2>&1 | grep -q "not a dynamic executable"; then
+                echo "✓ Static binary created successfully"
+              fi
+            '
+
+      - name: Create archive
+        run: |
+          tar czf rtorrent-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz rtorrent-${{ matrix.arch }}
+          sha256sum rtorrent-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz > rtorrent-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rtorrent-${{ matrix.arch }}
+          path: |
+            rtorrent-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz
+            rtorrent-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.rtorrent_version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: rtorrent ${{ steps.version.outputs.version }} with XML-RPC
+          body: |
+            # rtorrent ${{ steps.version.outputs.version }} with XML-RPC Support
+            
+            Pre-compiled rtorrent binaries with XML-RPC support enabled.
+            
+            ## Supported Architectures
+            - **x86_64** (amd64) - Desktop/Server
+            - **aarch64** (arm64) - ARM64 servers, Raspberry Pi 4/5
+            - **armv7l** - Raspberry Pi 3 and older
+            
+            ## Installation
+            
+            1. Download the appropriate binary for your architecture
+            2. Extract the archive:
+               ```bash
+               tar xzf rtorrent-${{ steps.version.outputs.version }}-<arch>.tar.gz
+               ```
+            3. Move to system path:
+               ```bash
+               sudo mv rtorrent-<arch> /usr/local/bin/rtorrent
+               sudo chmod +x /usr/local/bin/rtorrent
+               ```
+            4. Verify installation:
+               ```bash
+               rtorrent --help
+               ```
+            
+            ## Verify Checksums
+            ```bash
+            sha256sum -c rtorrent-${{ steps.version.outputs.version }}-<arch>.tar.gz.sha256
+            ```
+            
+            ## Upstream
+            Based on [rakshasa/rtorrent](https://github.com/rakshasa/rtorrent) ${{ steps.version.outputs.version }}
+          files: release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

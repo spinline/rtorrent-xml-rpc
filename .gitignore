@@ -1,0 +1,23 @@
+# Build artifacts
+*.tar.gz
+*.tar.gz.sha256
+rtorrent-*
+
+# Build directories
+build/
+dist/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
