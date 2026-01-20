@@ -30,9 +30,10 @@ jobs:
       - name: Build inside container for ${{ matrix.arch }}
         run: |
           if [ "${{ matrix.arch }}" = "mips" ]; then
-            # Use dockcross MIPS image with prebuilt cross-toolchain
-            docker run --rm -v "${{ github.workspace }}":/src -w /src dockcross/mipsel bash -lc '
-              apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf automake libtool pkg-config libcurl4-openssl-dev libsigc++-2.0-dev libncurses5-dev libjsoncpp-dev libjsonrpccpp-dev git zlib1g-dev libssl-dev && \
+            # Run an amd64 ubuntu container and install MIPS cross-toolchain packages
+            docker run --rm --platform=linux/amd64 -v "${{ github.workspace }}":/src -w /src ubuntu:22.04 bash -lc '
+              apt-get update && apt-get install -y --no-install-recommends software-properties-common && add-apt-repository universe || true && apt-get update && \
+              apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf automake libtool pkg-config libcurl4-openssl-dev libsigc++-2.0-dev libncurses5-dev libjsoncpp-dev libjsonrpccpp-dev git zlib1g-dev libssl-dev gcc-mips-linux-gnu g++-mips-linux-gnu && \
               chmod +x build/build-release.sh && RPC_IMPL=jsonrpc ARCH=mips ./build/build-release.sh mips'
           else
             docker run --rm --platform=${{ matrix.platform }} -v "${{ github.workspace }}":/src -w /src ubuntu:22.04 bash -lc '
