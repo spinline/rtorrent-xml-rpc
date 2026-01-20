@@ -54,12 +54,21 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   fi
   if [ -f configure ]; then
     chmod +x configure
-    ./configure --prefix=/usr/local ${HOST:-} || true
+    ./configure --prefix=/usr/local ${HOST:-}
   fi
-  make -j"$(nproc || echo 2)" || true
-  make install || true
-  ldconfig || true
-  export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+  make -j"$(nproc || echo 2)"
+  make install
+  ldconfig
+
+  # Locate any libtorrent .pc files and add their directories to PKG_CONFIG_PATH
+  pc_dirs=$(find /usr/local /usr -type f -path '*/pkgconfig/*' -name 'libtorrent*.pc' -printf '%h
+'" 2>/dev/null | sort -u | tr '\n' ':' | sed 's/:$//' ) || true
+  if [ -n "${pc_dirs}" ]; then
+    export PKG_CONFIG_PATH="${pc_dirs}:${PKG_CONFIG_PATH:-}"
+  else
+    # add common locations to help pkg-config lookup
+    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/lib/*-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}"
+  fi
   # Force use of host pkg-config so configure checks find the just-installed libtorrent
   if command -v pkg-config >/dev/null 2>&1; then
     export PKG_CONFIG="$(command -v pkg-config)"
