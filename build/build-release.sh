@@ -40,7 +40,7 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   fi
   if [ -f configure ]; then
     chmod +x configure
-    ./configure --prefix=/usr/local || true
+    ./configure --prefix=/usr/local ${HOST:-} || true
   fi
   make -j"$(nproc || echo 2)" || true
   make install || true
@@ -61,11 +61,26 @@ fi
 
 if [ -f configure ]; then
   chmod +x configure
+  # Cross-compile support for MIPS
+  if [ "${ARCH}" = "mips" ]; then
+    if command -v mips-linux-gnu-gcc >/dev/null 2>&1; then
+      echo "Using MIPS cross-compiler mips-linux-gnu-gcc"
+      export CC=mips-linux-gnu-gcc
+      export CXX=mips-linux-gnu-g++
+      export AR=mips-linux-gnu-ar
+      export RANLIB=mips-linux-gnu-ranlib
+      HOST="--host=mips-linux-gnu"
+    else
+      echo "Warning: mips cross-compiler not found; attempting native configure (may fail)" >&2
+      HOST=""
+    fi
+  fi
+
   if [ "${RPC_IMPL}" = "jsonrpc" ]; then
     echo "Configuring rtorrent with JSON-RPC support"
-    ./configure --enable-jsonrpc || true
+    ./configure ${HOST:-} --enable-jsonrpc || true
   else
-    ./configure || true
+    ./configure ${HOST:-} || true
   fi
 fi
 
