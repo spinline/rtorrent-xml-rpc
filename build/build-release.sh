@@ -61,8 +61,7 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libtorrent; 
   ldconfig
 
   # Locate any libtorrent .pc files and add their directories to PKG_CONFIG_PATH
-  pc_dirs=$(find /usr/local /usr -type f -path '*/pkgconfig/*' -name 'libtorrent*.pc' -printf '%h
-'" 2>/dev/null | sort -u | tr '\n' ':' | sed 's/:$//' ) || true
+    pc_dirs=$(find /usr/local /usr -type f -path '*/pkgconfig/*' -name 'libtorrent*.pc' -printf '%h\n' 2>/dev/null | sort -u | tr '\n' ':' | sed 's/:$//') || true
   if [ -n "${pc_dirs}" ]; then
     export PKG_CONFIG_PATH="${pc_dirs}:${PKG_CONFIG_PATH:-}"
   else
